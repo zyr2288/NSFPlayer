@@ -5,7 +5,6 @@
 
 根据资料 http://wiki.nesdev.com/w/index.php/APU 以及部分 [JSNES](https://github.com/bfirsh/jsnes) 代码进行编写
 
-
 A Simple NSF Player
 
 Only Support Ex-audio: VRC6
