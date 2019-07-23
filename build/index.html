@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset='utf-8'>
+	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+	<title>测试页面</title>
+	<meta name='viewport' content='width=device-width, initial-scale=1'>
+
+	<script src="my-lib/Waves/2A03/DMC.js"></script>
+	<script src="my-lib/Waves/2A03/Square.js"></script>
+	<script src="my-lib/Waves/2A03/Triangle.js"></script>
+	<script src="my-lib/Waves/2A03/Noise.js"></script>
+
+	<script src="my-lib/Waves/VRC6/Square.js"></script>
+	<script src="my-lib/Waves/VRC6/Sawtooth.js"></script>
+
+	<script src='my-lib/APU.js'></script>
+	<script src="my-lib/Const.js"></script>
+	<script src="my-lib/CPU.js"></script>
+	<script src="my-lib/Debug.js"></script>
+	<script src="my-lib/NSF.js"></script>
+	<script src="my-lib/NSFFile.js"></script>
+	<script src="my-lib/Utils.js"></script>
+</head>
+
+<body>
+	<input type="file" id="nsfFile">
+	<button onclick="play()">启动</button>
+	<button onclick="preview()">上一首</button>
+	<button onclick="next()">下一首</button>
+	<br>
+	<span id="debug"></span>
+	<script>
+		Debug.ele = document.getElementById("debug");
+		var nsf = new NSF("nsfFile");
+		
+		function play() {
+			nsf.Play(0);
+		}
+
+		function preview() {
+			nsf.Preview();
+		}
+
+		function next() {
+			nsf.Next();
+		}
+	</script>
+</body>
+
+</html>
