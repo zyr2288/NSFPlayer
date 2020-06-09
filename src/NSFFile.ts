@@ -1,4 +1,7 @@
-class NSFFile {
+import NSF from "./NSF";
+import { ChipType } from "./APU_Const";
+
+export default class NSFFile {
 
 	/**NSF驱动 */
 	nsf: NSF;
@@ -12,6 +15,9 @@ class NSFFile {
 	artist: string = "";
 	/**版权方 */
 	copyright: string = "";
+
+	/**文件状态，0未载入文件，1载入文件，2重新载入新文件 */
+	fileStatues: number = 0;
 
 	/**所有BANK */
 	banks: Array<Uint8Array> = [];
@@ -44,7 +50,7 @@ class NSFFile {
 		if (dataView[0] != 78 || dataView[1] != 69 || dataView[2] != 83 || dataView[3] != 77 || dataView[4] != 0x1A)
 			throw Error("不是一个合法的NSF文件");
 
-		let decoder = new TextDecoder("utf-8")
+		/*let decoder = new TextDecoder("utf-8")
 
 		let temp = Utils.RemoveZeroByte(dataView.slice(0xE, 0xE + 32));
 		this.name = decoder.decode(temp);
@@ -53,14 +59,16 @@ class NSFFile {
 		this.artist = decoder.decode(temp);
 
 		temp = Utils.RemoveZeroByte(dataView.slice(0x4E, 0x4E + 32));
-		this.copyright = decoder.decode(temp);
+		this.copyright = decoder.decode(temp);*/
 
-		this.chip_VRC6 = (dataView[0x7B] & 1) != 0;
-		this.chip_VRC7 = (dataView[0x7B] & 2) != 0;
-		this.chip_FDS = (dataView[0x7B] & 4) != 0;
-		this.chip_MMC5 = (dataView[0x7B] & 8) != 0;
-		this.chip_Namco163 = (dataView[0x7B] & 0x10) != 0;
-		this.chip_Sunsoft5B = (dataView[0x7B] & 0x20) != 0;
+		this.nsf.apu.mixer.soundChip = dataView[0x7B];
+
+		this.chip_VRC6 = (dataView[0x7B] & ChipType.VRC6) != 0;
+		this.chip_VRC7 = (dataView[0x7B] & ChipType.VRC7) != 0;
+		this.chip_FDS = (dataView[0x7B] & ChipType.FDS) != 0;
+		this.chip_MMC5 = (dataView[0x7B] & ChipType.MMC5) != 0;
+		this.chip_Namco163 = (dataView[0x7B] & ChipType.Namco163) != 0;
+		this.chip_Sunsoft5B = (dataView[0x7B] & ChipType.Sunsoft5B) != 0;
 
 		this.songsCount = dataView[0x6];
 		this.startSong = dataView[0x7];
@@ -70,11 +78,25 @@ class NSFFile {
 		this.playAddress = dataView[0xC] | (dataView[0xD] << 8);
 
 		let tempData = dataView.slice(0x80);
-		for (let index = 0, i = 0; index < tempData.length; i++ , index += 0x1000) {
-			if (index + 0x1000 <= tempData.length)
-				this.banks[i] = tempData.slice(index, index + 0x1000);
-			else
-				this.banks[i] = tempData.slice(index);
+
+		//BANK载入数据
+		let startBank = Math.floor((this.loadAddress - 0x8000) / 0x1000);
+		let loadLength = 0x1000 - (this.loadAddress & 0xFFF);
+		for (let index = 0, i = 0; index < tempData.length; index += 0x1000, i++) {
+			if (i < startBank) {
+				this.banks[i] = new Uint8Array(0x1000);
+				index -= 0x1000;
+				continue;
+			}
+
+			this.banks[i] = new Uint8Array(0x1000);
+			if (index + loadLength <= tempData.length) {
+				this.banks[i].set(tempData.slice(index, index + loadLength), 0x1000 - loadLength);
+				index -= 0x1000 - loadLength;
+				loadLength = 0x1000;
+			} else {
+				this.banks[i].set(tempData.slice(index));
+			}
 		}
 
 		for (let index = 0; index < 8; index++) {
@@ -84,6 +106,8 @@ class NSFFile {
 
 			this.SwitchBank(0x5FF8 + index, data);
 		}
+
+		this.nsf.play = false;
 	}
 
 	/**切BANK */

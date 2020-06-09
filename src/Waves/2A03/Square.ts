@@ -1,24 +1,31 @@
+import { FrameCountLength } from "../../APU_Const";
+
 /**
  * 矩形波
  * 两个CPU Clock 执行一个 Tick
  * 所以这里的Timer为 * 2
  */
-class Square {
-
-	apu: APU;
+export default class Square {
 
 	/**Duty查询表 */
-	dutyLookup = [
+	private readonly dutyLookup2 = [
 		[0, 1, 0, 0, 0, 0, 0, 0],
 		[0, 1, 1, 0, 0, 0, 0, 0],
 		[0, 1, 1, 1, 1, 0, 0, 0],
 		[1, 0, 0, 1, 1, 1, 1, 1]
 	];
 
+	private readonly dutyLookup = [
+		[0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+		[1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+	];
+
 	/**占空比类型 */
 	private dutyType: number = 0;
 	/**占空比的Index */
-	private count: number = 0;
+	private dutyIndex: number = 0;
 
 	/**声波计时器，若小于8，则静音 */
 	private timerMax: number = 0;
@@ -66,18 +73,16 @@ class Square {
 
 	/**
 	 * 构造函数
-	 * @param apu APU
 	 * @param sweepChange 如果是Square1通道，则在Sweep降频的时候多减去这个数
 	 */
-	constructor(apu: APU, sweepChange: number) {
-		this.apu = apu;
+	constructor(sweepChange: number) {
 		this.sweepChange = sweepChange;
 		this.Reset();
 	}
 
 	Reset() {
 		this.dutyType = 0;
-		this.count = 0;
+		this.dutyIndex = 0;
 		this.timer = 0;
 		this.volume = 0;
 		this.envelopeEnabled = false;
@@ -122,7 +127,7 @@ class Square {
 		this.envelopeReset = true;
 		this.timerMax = (this.timerMax & 0xFF) | ((value & 0x7) << 8);
 		if (this.enabled)
-			this.frameCounter = this.apu.frameCountLength[value >> 3];
+			this.frameCounter = FrameCountLength[value >> 3];
 	}
 
 	/**执行一个APU时钟 */
@@ -131,7 +136,7 @@ class Square {
 			if (!this.sweepDirection && this.timer + (this.timer >> this.sweepRightShiftAmount) > 4095)
 				this.outputValue = 0;
 			else
-				this.outputValue = this.volume * this.dutyLookup[this.dutyType][this.count];
+				this.outputValue = this.volume * this.dutyLookup[this.dutyType][this.dutyIndex];
 		} else {
 			this.outputValue = 0;
 		}
@@ -140,12 +145,19 @@ class Square {
 	/**
 	 * 执行APU时钟
 	 */
-	DoClock() {
-		if (--this.timer <= 0) {
-			this.count = (this.count + 1) & 0x7;
-			this.timer += this.timerMax + 1;
-			this.UpdateSampleValue();
+	DoClock(cpuClock: number) {
+		if (!this.enabled || this.timerMax < 8) {
+			this.outputValue = 0;
+			return;
 		}
+
+		this.timer -= cpuClock;
+		while (this.timer <= 0) {
+			this.timer += this.timerMax + 1;
+			this.dutyIndex++;
+			this.dutyIndex &= 0xF;
+		}
+		this.UpdateSampleValue();
 	}
 
 	/**执行一次FrameCount */

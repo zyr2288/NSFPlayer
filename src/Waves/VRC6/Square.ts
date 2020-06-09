@@ -1,9 +1,7 @@
-class VRC6_Square {
-
-	apu: APU;
+export default class VRC6_Square {
 
 	/**Duty查询表 */
-	dutyLookup = [
+	private readonly dutyLookup = [
 		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 		[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 		[1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -33,15 +31,12 @@ class VRC6_Square {
 	private cycleCounter: number = 0;
 
 	/**输出的声音值 */
-	public outputValue: number = 0;
+	outputValue: number = 0;
 
 	/**
 	 * 构造函数
-	 * @param apu APU
-	 * @param sweepChange 如果是Square1通道，则在Sweep降频的时候多减去这个数
 	 */
-	constructor(apu: APU) {
-		this.apu = apu;
+	constructor() {
 		this.Reset();
 	}
 
@@ -84,12 +79,19 @@ class VRC6_Square {
 			this.volume = 0;
 	}
 
-	DoClock() {
-		this.timer -= 2;
-		if (this.enabled && this.timer <= 0) {
-			this.timer += this.timerMax + 1;
-			this.count = (this.count + 1) & 0x1F;
-			this.outputValue = this.volume * this.dutyLookup[this.dutyType][this.count & 0xF];
+	DoClock(cpuClock: number) {
+		if (!this.enabled || this.timerMax < 1) {
+			this.outputValue = 0;
+			return;
 		}
+
+		this.timer -= cpuClock;
+		while (this.timer <= 0) {
+			this.timer += this.timerMax + 1;
+			this.count++;
+			this.count &= 0x1F;
+		}
+		this.outputValue = this.volume * this.dutyLookup[this.dutyType][this.count & 0xF];
+
 	}
 }

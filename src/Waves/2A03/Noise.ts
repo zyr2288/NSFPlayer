@@ -1,11 +1,12 @@
-class Noise {
+import { NES_Type, FrameCountLength } from "../../APU_Const";
 
-	apu: APU;
+export default class Noise {
+	private readonly noiseWaveLengthLookup_NTSC = [4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
+	private readonly noiseWaveLengthLookup_PAL = [4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778];
 
-	readonly noiseWaveLengthLookup_NTSC = [4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
-	readonly noiseWaveLengthLookup_PAL = [4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778];
+	private lookUp = this.noiseWaveLengthLookup_NTSC;
 
-	shiftReg = 1;
+	private shiftReg = 1;
 
 	/**通道是否开启 */
 	public enabled = true;
@@ -42,8 +43,7 @@ class Noise {
 
 	private temp = 0;
 
-	constructor(apu: APU) {
-		this.apu = apu;
+	constructor() {
 		this.Reset();
 	}
 
@@ -60,7 +60,7 @@ class Noise {
 	}
 
 	/**声波通道是否开启 */
-	SetEnabled(enabled: boolean) {
+	SetEnabled(enabled: boolean): void {
 		this.enabled = enabled;
 		if (!enabled)
 			this.frameCounter = 0;
@@ -68,7 +68,7 @@ class Noise {
 		this.UpdateSampleValue();
 	}
 
-	SetVolumeOrEnvelope(value: number) {
+	SetVolumeOrEnvelope(value: number): void {
 		this.frameCounterEnable = (value & 0x20) == 0;
 		this.envelopeLoopingEnable = (value & 0x10) == 0;
 		this.envelopeEnabled = (value & 0x10) == 0;
@@ -76,49 +76,46 @@ class Noise {
 		this.volume = this.envelopeRateMax;
 	}
 
-	SetTimerAndMode(value: number) {
-		this.timerMax = this.noiseWaveLengthLookup_NTSC[value & 0xF] / 2;
+	SetTimerAndMode(value: number): void {
+		this.timerMax = this.lookUp[value & 0xF];
 		this.randomMode = (value & 8) == 0;
 	}
 
 	SetFrameCounter(value: number) {
-		this.frameCounter = this.apu.frameCountLength[value >> 3];
+		this.frameCounter = FrameCountLength[value >> 3];
 		this.envelopeReset = true;
 	}
 
-	DoClock() {
-		if (--this.timer <= 0) {
+	DoClock(cpuClock: number) {
+		if (!this.enabled || this.timerMax < 1 || this.frameCounter < 1) {
+			this.outputValue = 0;
+			return;
+		}
+
+		this.timer -= cpuClock;
+		while (this.timer <= 0) {
 			//同矩形波，但是给出的波长表已经对应的x2了，所以在这里不x2
 			this.timer += this.timerMax;
-
 			this.shiftReg <<= 1;
-
-			this.temp = ((this.shiftReg << (this.randomMode ? 1 : 6)) ^ this.shiftReg) & 0x8000;
+			this.temp = ((this.shiftReg << (this.randomMode ? 1 : 3)) ^ this.shiftReg) & 0x4000;
 			if (this.temp != 0) {
 				this.shiftReg |= 0x01;
 				this.outBit = 0;
-				this.outputValue = 0;
 			} else {
 				this.outBit = 1;
-				if (this.enabled && this.frameCounter > 0) {
-					this.outputValue = this.volume;
-				} else {
-					this.outputValue = 0;
-				}
 			}
-
-			this.UpdateSampleValue();
 		}
+		this.UpdateSampleValue();
 	}
 
 	/**执行包络 */
-	DoEnvelopDecayClock() {
+	DoEnvelopDecayClock(): void {
 		if (this.envelopeReset) {
 			this.envelopeReset = false;
 			this.envelopeRateCount = this.envelopeRateMax;
 			this.envelopeVolumn = 0xF;
 		}
-		
+
 		if (--this.envelopeRateCount <= 0) {
 			this.envelopeRateCount += this.envelopeRateMax + 1;
 			if (this.envelopeVolumn > 0)
@@ -135,17 +132,29 @@ class Noise {
 		this.UpdateSampleValue();
 	}
 
-	DoFrameClock() {
+	DoFrameClock(): void {
 		if (this.frameCounterEnable && this.frameCounter > 0) {
 			if (--this.frameCounter == 0)
 				this.UpdateSampleValue();
 		}
 	}
 
-	UpdateSampleValue() {
+	private UpdateSampleValue(): void {
 		if (this.enabled && this.frameCounter > 0)
 			this.outputValue = this.outBit * this.volume;
 		else
 			this.outputValue = 0;
+	}
+
+	SwitchType(nesType: NES_Type): void {
+		switch (nesType) {
+			case NES_Type.NTSC:
+			case NES_Type.Dendy:
+				this.lookUp = this.noiseWaveLengthLookup_NTSC;
+				break;
+			case NES_Type.PAL:
+				this.lookUp = this.noiseWaveLengthLookup_PAL;
+				break;
+		}
 	}
 }

@@ -1,17 +1,22 @@
-// NSF中，CPU两个时钟 = APU一个时钟
+import CPU from "./CPU";
+import APU from "./APU";
+import NSFFile from "./NSFFile";
+import { CPU_NTSC } from "./APU_Const";
 
-
-/**NSF总类 */
-class NSF {
+/**
+ * NSF总类
+ * NSF中，CPU两个时钟 = APU一个时钟
+ */
+export default class NSF {
 
 	cpu: CPU;
 	apu: APU;
 	nsfFile: NSFFile;
 
 	/**执行的CPU时钟 */
-	allCycle: number = 0;
+	private allCycle: number = 0;
 	/**临时CPU时钟 */
-	tempCycle: number = 0;
+	private tempCycle: number = 0;
 
 	audioContext: AudioContext = new AudioContext();
 
@@ -22,9 +27,9 @@ class NSF {
 	/**样本掩码，sampleLength - 1 */
 	readonly sampleMask = 4095;
 	/**缓冲区是否准备完毕 */
-	bufferReady = false;
+	private bufferReady = false;
 	/**样本缓冲 */
-	audioSamples = new Float32Array(this.sampleLength);
+	private audioSamples = new Float32Array(this.sampleLength);
 
 	audioWriteIndex = 0;
 	audioReadIndex = 0;
@@ -34,25 +39,17 @@ class NSF {
 	nowPlaying = 0;
 
 	/**NSF构造函数，inputElement为文件InputElement */
-	constructor(inputElement: string) {
+	constructor() {
 
 		this.nsfFile = new NSFFile(this);
 		this.cpu = new CPU(this);
 		this.apu = new APU(this);
-		(<HTMLInputElement>document.getElementById(inputElement)).addEventListener("change", (event: any) => {
-			let data = event.target.files[0];
-			var reader = new FileReader();
-			reader.readAsArrayBuffer(data);
-			reader.onload = (evt: any) => {
-				this.nsfFile.LoadFile(evt.target.result);
-			}
-		});
 
 		var script_processor = this.audioContext.createScriptProcessor(this.bufferLength, 1, 1);
 		script_processor.onaudioprocess = (ev: AudioProcessingEvent) => {
-			let temp = ev.outputBuffer;
-			let buffer = temp.getChannelData(0);
-			let length = temp.length;
+
+			let buffer = ev.outputBuffer.getChannelData(0);
+			let length = ev.outputBuffer.length;
 
 			let tempIndex = 0;
 			if (!this.play) {
@@ -91,32 +88,32 @@ class NSF {
 	}
 
 	private OneFrame() {
+		/*setTimeout(() => {
+			if (this.nsfFile.chip_VRC7) {
+				(<Float32Array>this.vrc7Buffer).set((<VRC7_Mixer>this.apu.vrc7_mixer).GetSimple(), 0);
+			}
+		});*/
 		while (true) {
 			this.tempCycle = this.cpu.OneOperation();
 			this.apu.sampleTime += this.tempCycle;
 			this.allCycle += this.tempCycle;
 
-			//这里还是采用 1 APU Clock = 2 CPU Clock进行计算
-			while (this.tempCycle >= 2) {
-				this.tempCycle -= 2;
-				this.apu.DoClock();
-				this.apu.DoFrame();
-			}
+			this.apu.DoClock(this.tempCycle);
 
 			while (this.apu.sampleTime >= this.apu.SAMPLE_CPU_CLOCKS) {
 				this.apu.sampleTime -= this.apu.SAMPLE_CPU_CLOCKS;
-				this.SetBuffer(this.apu.Sample());
+				this.SetBuffer(this.apu.mixer.GetSample());
 			}
 
-			if (this.allCycle > Const.CPU_NTSC) {
-				this.allCycle -= Const.CPU_NTSC;
+			if (this.allCycle >= CPU_NTSC) {
+				this.allCycle -= CPU_NTSC;
 				break;
 			}
 		}
 		this.cpu.doNothingMode = false;
-		if (this.cpu.interruptType == 2) {
+		if (this.cpu.interruptType == 2)
 			this.cpu.register_PC = 0x3800;
-		}
+
 		//Debug.UpdateEle(this.apu.noise.volume);
 	}
 
@@ -150,6 +147,7 @@ class NSF {
 		this.cpu.register_PC = 0x3803;
 
 		this.play = true;
+		this.audioContext.resume();
 	}
 
 	Next() {
@@ -160,8 +158,21 @@ class NSF {
 		this.Play(--this.nowPlaying);
 	}
 
+	GetSongName(): string {
+		return this.nsfFile.name;
+	}
+
+	GetSongArtist(): string {
+		return this.nsfFile.artist;
+	}
+
+	GetSongCopyright(): string {
+		return this.nsfFile.copyright;
+	}
+
 	private SetBuffer(value: number) {
 		this.audioSamples[this.audioWriteIndex] = value;
-		this.audioWriteIndex = (this.audioWriteIndex + 1) & this.sampleMask;
+		this.audioWriteIndex++;
+		this.audioWriteIndex &= this.sampleMask;
 	}
 }

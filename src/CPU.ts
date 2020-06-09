@@ -1,3 +1,5 @@
+import NSF from "./NSF";
+
 //#region 枚举
 /**标志位枚举 */
 const enum Flags {
@@ -72,7 +74,7 @@ const enum PreDoRegesiter {
 }
 //#endregion 枚举
 
-class CPU {
+export default class CPU {
 
 	//#region 变量
 	/**CPU内存 */
@@ -111,6 +113,8 @@ class CPU {
 
 	/**NSF专用，在执行完成音乐程序之后，此为True */
 	public doNothingMode: boolean = false;
+
+	private operations: Function[] = [];
 	//#endregion 变量
 
 	constructor(nsf: NSF) {
@@ -141,6 +145,10 @@ class CPU {
 
 		this.register_A = this.register_X = this.register_Y = 0;
 		this.register_S = 0xFF;
+
+		for (let i = 0; i < 0x100; i++)
+			this.operations[i] = this.SetOperation(i);
+
 	}
 
 	//#region 执行一行操作
@@ -150,6 +158,9 @@ class CPU {
 	 */
 	public DoOperation(operation: number) {
 		let tempAdd: number = 0;
+
+
+
 		switch (operation) {
 
 			//#region TAY TAX TSX TYA TXA TXS 操作
@@ -783,6 +794,887 @@ class CPU {
 	}
 	//#endregion 执行一行操作
 
+	//#region 执行一行操作
+	/**
+	 * 执行一行操作
+	 * @param operation 操作指令
+	 */
+	public SetOperation(operation: number): Function {
+		// let tempAdd: number = 0;
+
+		let result: Function;
+
+		switch (operation) {
+
+			//#region TAY TAX TSX TYA TXA TXS 操作
+			case 0xA8:		//TAY
+				result = () => { this.register_Y = this.OperationToRegister(this.register_A); }
+				break;
+			case 0xAA:		//TAX
+				result = () => { this.register_X = this.OperationToRegister(this.register_A); }
+				break;
+			case 0xBA:		//TSX
+				result = () => { this.register_X = this.OperationToRegister(this.register_X); }
+				break;
+			case 0x98:		//TYA
+				result = () => { this.register_A = this.OperationToRegister(this.register_Y); }
+				break;
+			case 0x8A:		//TXA
+				result = () => { this.register_A = this.OperationToRegister(this.register_X); }
+				break;
+			case 0x9A:		//TXS
+				result = () => {
+					this.register_S = this.register_X;
+					this.clock = 2;
+					this.register_PC++;
+				}
+				break;
+			//#endregion TAY TAX TSX TYA TXA TXS 操作
+			//#region LDA LDX LDY 操作
+			case 0xA9:		//LDA #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.register_A = this.OperationLD(tempAdd, 2);
+				}
+				break;
+			case 0xA5:		//LDA nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.register_A = this.OperationLD(tempAdd, 3);
+				}
+				break;
+			case 0xB5:		//LDA nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.register_A = this.OperationLD((tempAdd + this.register_X) & 0xFF, 4);
+				}
+				break;
+			case 0xAD:		//LDA nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.register_A = this.OperationLD(tempAdd, 4);
+				}
+				break;
+			case 0xBD:		//LDA nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.register_A = this.OperationLD(tempAdd + this.register_X, 4, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0xB9:		//LDA nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.register_A = this.OperationLD(tempAdd + this.register_Y, 4, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0xA1:		//LDA (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.register_A = this.OperationLD(tempAdd, 6);
+				}
+				break;
+			case 0xB1:		//LDA (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.register_A = this.OperationLD(tempAdd + this.register_Y, 5, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0xA2:		//LDX #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.register_X = this.OperationLD(tempAdd, 2);
+				}
+				break;
+			case 0xA6:		//LDX nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.register_X = this.OperationLD(tempAdd, 3);
+				}
+				break;
+			case 0xB6:		//LDX nn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_Y);
+					this.register_X = this.OperationLD((tempAdd + this.register_Y) & 0xFF, 4);
+				}
+				break;
+			case 0xAE:		//LDX nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.register_X = this.OperationLD(tempAdd, 4);
+				}
+				break;
+			case 0xBE:		//LDX nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.register_X = this.OperationLD(tempAdd + this.register_Y, 4, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0xA0:		//LDY #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.register_Y = this.OperationLD(tempAdd, 2);
+				}
+				break;
+			case 0xA4:		//LDY nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.register_Y = this.OperationLD(tempAdd, 3);
+				}
+				break;
+			case 0xB4:		//LDY nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.register_Y = this.OperationLD((tempAdd + this.register_X) & 0xFF, 4);
+				}
+				break;
+			case 0xAC:		//LDY nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.register_Y = this.OperationLD(tempAdd, 4);
+				}
+				break;
+			case 0xBC:		//LDY nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.register_Y = this.OperationLD(tempAdd + this.register_X, 4, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			//#endregion LDA LDX LDY 操作
+			//#region STA STX STY 操作
+			case 0x85:		//STA nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationST(tempAdd, 3, this.register_A);
+				}
+				break;
+			case 0x95:		//STA nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationST((tempAdd + this.register_X) & 0xFF, 4, this.register_A);
+				}
+				break;
+			case 0x8D:		//STA nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationST(tempAdd, 4, this.register_A);
+				}
+				break;
+			case 0x9D:		//STA nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationST(tempAdd + this.register_X, 5, this.register_A);
+				}
+				break;
+			case 0x99:		//STA nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationST(tempAdd + this.register_Y, 5, this.register_A);
+				}
+				break;
+			case 0x81:		//STA (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationST(tempAdd, 6, this.register_A);
+				}
+				break;
+			case 0x91:		//STA (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationST(tempAdd + this.register_Y, 6, this.register_A);
+				}
+				break;
+
+			case 0x86:		//STX nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationST(tempAdd, 3, this.register_X);
+				}
+				break;
+			case 0x96:		//STX nn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_Y);
+					this.OperationST((tempAdd + this.register_Y) & 0xFF, 4, this.register_X);
+				}
+				break;
+			case 0x8E:		//STX nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationST(tempAdd, 4, this.register_X);
+				}
+				break;
+
+			case 0x84:		//STY nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationST(tempAdd, 3, this.register_Y);
+				}
+				break;
+			case 0x94:		//STY nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationST((tempAdd + this.register_X) & 0xFF, 4, this.register_Y);
+				}
+				break;
+			case 0x8C:		//STY nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationST(tempAdd, 4, this.register_Y);
+				}
+				break;
+			//#endregion STA STX STY 操作
+			//#region PHA PHP PLA PLP 操作
+			case 0x48:
+				result = () => { this.OperationP(Operations.PHA); }
+				break;
+			case 0x08:
+				result = () => { this.OperationP(Operations.PHP); }
+				break;
+			case 0x68:
+				result = () => { this.OperationP(Operations.PLA); }
+				break;
+			case 0x28:
+				result = () => { this.OperationP(Operations.PLP); }
+				break;
+			//#endregion PHA PHP PLA PLP 操作
+			//#region ADC SBC 操作
+			case 0x69:		//ADC #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationADCOrSBC(tempAdd, 2, Operations.ADC);
+				}
+				break;
+			case 0x65:		//ADC nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationADCOrSBC(tempAdd, 3, Operations.ADC);
+				}
+				break;
+			case 0x75:		//ADC nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationADCOrSBC((tempAdd + this.register_X) & 0xFF, 4, Operations.ADC);
+				}
+				break;
+			case 0x6D:		//ADC nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationADCOrSBC(tempAdd, 4, Operations.ADC);
+				}
+				break;
+			case 0x7D:		//ADC nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationADCOrSBC(tempAdd + this.register_X, 4, Operations.ADC, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0x79:		//ADC nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationADCOrSBC(tempAdd + this.register_Y, 4, Operations.ADC, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0x61:		//ADC (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationADCOrSBC(tempAdd, 6, Operations.ADC);
+				}
+				break;
+			case 0x71:		//ADC (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationADCOrSBC(tempAdd + this.register_Y, 5, Operations.ADC, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0xE9:		//SBC #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationADCOrSBC(tempAdd, 2, Operations.SBC);
+				}
+				break;
+			case 0xE5:		//SBC nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationADCOrSBC(tempAdd, 3, Operations.SBC);
+				}
+				break;
+			case 0xF5:		//SBC nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationADCOrSBC(tempAdd + this.register_X, 4, Operations.SBC);
+				}
+				break;
+			case 0xED:		//SBC nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationADCOrSBC(tempAdd, 4, Operations.SBC);
+				}
+				break;
+			case 0xFD:		//SBC nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationADCOrSBC(tempAdd + this.register_X, 4, Operations.SBC, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0xF9:		//SBC nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationADCOrSBC(tempAdd + this.register_Y, 4, Operations.SBC, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0xE1:		//SBC (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationADCOrSBC(tempAdd, 6, Operations.SBC);
+				}
+				break;
+			case 0xF1:		//SBC (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationADCOrSBC(tempAdd + this.register_Y, 5, Operations.SBC, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			//#endregion ADC SBC 操作
+			//#region AND EOR ORA 操作
+			case 0x29:		//AND #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationANDOrEOROrORA(tempAdd, 2, Operations.AND);
+				}
+				break;
+			case 0x25:		//AND nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationANDOrEOROrORA(tempAdd, 3, Operations.AND);
+				}
+				break;
+			case 0x35:		//AND nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.AND);
+				}
+				break;
+			case 0x2D:		//AND nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationANDOrEOROrORA(tempAdd, 4, Operations.AND);
+				}
+				break;
+			case 0x3D:		//AND nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.AND, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0x39:		//AND nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 4, Operations.AND, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0x21:		//AND (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationANDOrEOROrORA(tempAdd, 6, Operations.AND);
+				}
+				break;
+			case 0x31:		//AND (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 5, Operations.AND, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0x49:		//EOR #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationANDOrEOROrORA(tempAdd, 2, Operations.EOR);
+				}
+				break;
+			case 0x45:		//EOR nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationANDOrEOROrORA(tempAdd, 3, Operations.EOR);
+				}
+				break;
+			case 0x55:		//EOR nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.EOR);
+				}
+				break;
+			case 0x4D:		//EOR nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationANDOrEOROrORA(tempAdd, 4, Operations.EOR);
+				}
+				break;
+			case 0x5D:		//EOR nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.EOR, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0x59:		//EOR nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 4, Operations.EOR, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0x41:		//EOR (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationANDOrEOROrORA(tempAdd, 6, Operations.EOR);
+				}
+				break;
+			case 0x51:		//EOR (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 5, Operations.EOR, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0x09:		//ORA #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationANDOrEOROrORA(tempAdd, 2, Operations.ORA);
+				}
+				break;
+			case 0x05:		//ORA nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationANDOrEOROrORA(tempAdd, 3, Operations.ORA);
+				}
+				break;
+			case 0x15:		//ORA nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.ORA);
+				}
+				break;
+			case 0x0D:		//ORA nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationANDOrEOROrORA(tempAdd, 4, Operations.ORA);
+				}
+				break;
+			case 0x1D:		//ORA nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_X, 4, Operations.ORA, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0x19:		//ORA nnnn,Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 4, Operations.ORA, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0x01:		//ORA (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationANDOrEOROrORA(tempAdd, 6, Operations.ORA);
+				}
+				break;
+			case 0x11:		//ORA (nn),Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationANDOrEOROrORA(tempAdd + this.register_Y, 5, Operations.ORA, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			//#endregion AND EOR ORA 操作
+			//#region CMP CPX CPY 操作
+			case 0xC9:		//CMP #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationCP(this.register_A, tempAdd, 2);
+				}
+				break;
+			case 0xC5:		//CMP nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationCP(this.register_A, tempAdd, 3);
+				}
+				break;
+			case 0xD5:		//CMP nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationCP(this.register_A, (tempAdd + this.register_X) & 0xFF, 2);
+				}
+				break;
+			case 0xCD:		//CMP nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationCP(this.register_A, tempAdd, 4);
+				}
+				break;
+			case 0xDD:		//CMP nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationCP(this.register_A, tempAdd + this.register_X, 4, (tempAdd & 0xFF) + this.register_X > 0xFF);
+				}
+				break;
+			case 0xD9:		//CMP nnnn.Y
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_Y);
+					this.OperationCP(this.register_A, tempAdd + this.register_Y, 4, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+			case 0xC1:		//CMP (nn,X)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_X);
+					this.OperationCP(this.register_A, tempAdd, 6);
+				}
+				break;
+			case 0xD1:		//CMP (nn,Y)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect_Y);
+					this.OperationCP(this.register_A, tempAdd + this.register_Y, 5, (tempAdd & 0xFF) + this.register_Y > 0xFF);
+				}
+				break;
+
+			case 0xE0:		//CPX #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationCP(this.register_X, tempAdd, 2);
+				}
+				break;
+			case 0xE4:		//CPX nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationCP(this.register_X, tempAdd, 3);
+				}
+				break;
+			case 0xEC:		//CPX nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationCP(this.register_X, tempAdd, 4);
+				}
+				break;
+
+			case 0xC0:		//CPY #nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Immediate);
+					this.OperationCP(this.register_Y, tempAdd, 2);
+				}
+				break;
+			case 0xC4:		//CPY nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationCP(this.register_Y, tempAdd, 3);
+				}
+				break;
+			case 0xCC:		//CPY nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationCP(this.register_Y, tempAdd, 4);
+				}
+				break;
+			//#endregion CMP CPX CPY 操作
+			//#region BIT 操作
+			case 0x24:		//BIT nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationBIT(tempAdd, 3);
+				}
+				break;
+			case 0x2C:		//BIT nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationBIT(tempAdd, 4);
+				}
+				break;
+			//#endregion BIT 操作
+			//#region INC INX INY DEC DEX DEY 操作
+			case 0xE6:		//INC nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationINCOrDec(5, 1, tempAdd, Operations.UsingAddress);
+				}
+				break;
+			case 0xF6:		//INC nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationINCOrDec(6, 1, (tempAdd + this.register_X) & 0xFF, Operations.UsingAddress);
+				}
+				break;
+			case 0xEE:		//INC nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationINCOrDec(6, 1, tempAdd, Operations.UsingAddress);
+				}
+				break;
+			case 0xFE:		//INC nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationINCOrDec(7, 1, tempAdd + this.register_X, Operations.UsingAddress);
+				}
+				break;
+
+			case 0xE8:		//INX
+				result = () => { this.register_X = this.OperationINCOrDec(2, 1, this.register_X, Operations.UsingRegister); }
+				break;
+
+			case 0xC8:		//INY
+				result = () => { this.register_Y = this.OperationINCOrDec(2, 1, this.register_Y, Operations.UsingRegister); }
+				break;
+
+			case 0xC6:		//DEC nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationINCOrDec(5, -1, tempAdd, Operations.UsingAddress);
+				}
+				break;
+			case 0xD6:		//DEC nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationINCOrDec(6, -1, (tempAdd + this.register_X) & 0xFF, Operations.UsingAddress);
+				}
+				break;
+			case 0xCE:		//DEC nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationINCOrDec(6, -1, tempAdd, Operations.UsingAddress);
+				}
+				break;
+			case 0xDE:		//DEC nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationINCOrDec(7, -1, tempAdd + this.register_X, Operations.UsingAddress);
+				}
+				break;
+
+			case 0xCA:		//DEX
+				result = () => { this.register_X = this.OperationINCOrDec(2, -1, this.register_X, Operations.UsingRegister); }
+				break;
+
+			case 0x88:		//DEY
+				result = () => { this.register_Y = this.OperationINCOrDec(2, -1, this.register_Y, Operations.UsingRegister); }
+				break;
+			//#endregion INC INX INY DEC DEX DEY 操作
+			//#region ASL LSR ROL ROR 操作
+			case 0x0A:		//ASL
+				result = () => { this.OperationShift(2, false, true); }
+				break;
+			case 0x06:		//ASL nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationShift(5, false, true, tempAdd);
+				}
+				break;
+			case 0x16:		//ASL nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationShift(6, false, true, (tempAdd + this.register_X) & 0xFF);
+				}
+				break;
+			case 0x0E:		//ASL nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationShift(6, false, true, tempAdd);
+				}
+				break;
+			case 0x1E:		//ASL nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationShift(7, false, true, tempAdd + this.register_X);
+				}
+				break;
+
+			case 0x4A:		//LSR
+				result = () => { this.OperationShift(2, false, false); }
+				break;
+			case 0x46:		//LSR nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationShift(5, false, false, tempAdd);
+				}
+				break;
+			case 0x56:		//LSR nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationShift(6, false, false, (tempAdd + this.register_X) & 0xFF);
+				}
+				break;
+			case 0x4E:		//LSR nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationShift(6, false, false, tempAdd);
+				}
+				break;
+			case 0x5E:		//LSR nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationShift(7, false, false, tempAdd + this.register_X);
+				}
+				break;
+
+			case 0x2A:		//ROL
+				result = () => { this.OperationShift(2, true, true); }
+				break;
+			case 0x26:		//ROL nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationShift(5, true, true, tempAdd);
+				}
+				break;
+			case 0x36:		//ROL nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationShift(6, true, true, (tempAdd + this.register_X) & 0xFF);
+				}
+				break;
+			case 0x2E:		//ROL nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationShift(6, true, true, tempAdd);
+				}
+				break;
+			case 0x3E:		//ROL nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationShift(7, true, true, tempAdd + this.register_X);
+				}
+				break;
+
+			case 0x6A:		//ROR
+				result = () => { this.OperationShift(2, true, false); }
+				break;
+			case 0x66:		//ROR nn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage);
+					this.OperationShift(5, true, false, tempAdd);
+				}
+				break;
+			case 0x76:		//ROR nn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.ZeroPage_X);
+					this.OperationShift(6, true, false, (tempAdd + this.register_X) & 0xFF);
+				}
+				break;
+			case 0x6E:		//ROR nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationShift(6, true, false, tempAdd);
+				}
+				break;
+			case 0x7E:		//ROR nnnn,X
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute_X);
+					this.OperationShift(7, true, false, tempAdd + this.register_X);
+				}
+				break;
+			//#endregion ASL LSR ROL ROR 操作
+			//#region JMP JSR RTI RTS 操作
+			case 0x4C:		//JMP nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationJMPOrJSROrBack(3, Operations.JMP, tempAdd);
+				}
+				break;
+			case 0x6C:		//JMP (nnnn)
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Indirect);
+					this.OperationJMPOrJSROrBack(5, Operations.JMP, tempAdd);
+				}
+				break;
+			case 0x20:		//JSR nnnn
+				result = () => {
+					let tempAdd = this.FindAddress(FindAddressType.Absolute);
+					this.OperationJMPOrJSROrBack(6, Operations.JSR, tempAdd);
+				}
+				break;
+			case 0x40:		//RTI
+				result = () => { this.OperationJMPOrJSROrBack(6, Operations.RTI); }
+				break;
+			case 0x60:		//RTS
+				result = () => { this.OperationJMPOrJSROrBack(6, Operations.RTS); }
+				break;
+			//#endregion JMP JSR RTI RTS 操作
+			//#region BPL BMI BVC BVS BCC BCS BNE BEQ 操作
+			case 0x10:		//BPL nn
+				result = () => { this.OperationBXX(Operations.BPL); }
+				break;
+			case 0x30:		//BMI nn
+				result = () => { this.OperationBXX(Operations.BMI); }
+				break;
+			case 0x50:		//BVC nn
+				result = () => { this.OperationBXX(Operations.BVC); }
+				break;
+			case 0x70:		//BVS nn
+				result = () => { this.OperationBXX(Operations.BVS); }
+				break;
+			case 0x90:		//BCC nn
+				result = () => { this.OperationBXX(Operations.BCC); }
+				break;
+			case 0xB0:		//BCS nn
+				result = () => { this.OperationBXX(Operations.BCS); }
+				break;
+			case 0xD0:		//BNE nn
+				result = () => { this.OperationBXX(Operations.BNE); }
+				break;
+			case 0xF0:		//BEQ nn
+				result = () => { this.OperationBXX(Operations.BEQ); }
+				break;
+			//#endregion BPL BMI BVC BVS BCC BCS BNE BEQ 操作
+			//#region BRK 操作
+			case 0x00:		//BRK
+				result = () => {
+					this.flags[Flags.Flag_B] = true;
+					this.DataPush(this.register_PC + 1, 2);
+					this.DataPush(this.register_P, 1);
+					this.flags[Flags.Flag_I] = true;
+					this.register_PC = this.FindAddress(FindAddressType.IRQ);
+					this.clock = 7;
+				}
+				break;
+			//#endregion BRK 操作
+			//#region CLC CLI CLD CLV SEC SEI SED 操作
+			case 0x18:		//CLC
+				result = () => { this.OperationFlags(Flags.Flag_C, false); }
+				break;
+			case 0x58:		//CLI
+				result = () => { this.OperationFlags(Flags.Flag_I, false); }
+				break;
+			case 0xD8:		//CLD
+				result = () => { this.OperationFlags(Flags.Flag_D, false); }
+				break;
+			case 0xB8:		//CLV
+				result = () => { this.OperationFlags(Flags.Flag_V, false); }
+				break;
+			case 0x38:		//SEC
+				result = () => { this.OperationFlags(Flags.Flag_C, true); }
+				break;
+			case 0x78:		//SEI
+				result = () => { this.OperationFlags(Flags.Flag_I, true); }
+				break;
+			case 0xF8:		//SED
+				result = () => { this.OperationFlags(Flags.Flag_D, true); }
+				break;
+			//#endregion CLC CLI CLD CLV SEC SEI SED 操作
+			//#region NOP 操作
+			case 0xEA:
+				result = () => {
+					this.clock = 2;
+					this.register_PC++;
+				}
+				break;
+			//#endregion NOP 操作
+
+			default:
+				result = () => {
+					this.clock = 4;
+					throw Error(operation + " " + this.register_PC.toString(16));
+				}
+			//break;
+		}
+
+		return result;
+	}
+	//#endregion 执行一行操作
+
 	//#region 操作指令
 	/**
 	 * TAY TAX TSX TYA TXA 操作
@@ -1322,7 +2214,9 @@ class CPU {
 			return 2;
 
 		let opNum: number = this.GetMemoryData(this.register_PC, 1);
-		this.DoOperation(opNum);
+
+		this.nsf.cpu.operations[opNum]();
+		//this.DoOperation(opNum);
 		return this.clock;
 	}
 

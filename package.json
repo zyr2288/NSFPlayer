@@ -1,0 +1,21 @@
+{
+	"name": "nsfplayer",
+	"version": "1.0.0",
+	"description": "尝试用Typescript写一个NSF播放器",
+	"private": false,
+	"main": "./src/Index.ts",
+	"mode": "development",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"build": "webpack",
+		"watch": "webpack --watch"
+	},
+	"author": "ZENG GE",
+	"license": "ISC",
+	"devDependencies": {
+		"ts-loader": "^6.2.1",
+		"typescript": "^3.7.4",
+		"webpack": "^4.41.5",
+		"webpack-cli": "^3.3.10"
+	}
+}

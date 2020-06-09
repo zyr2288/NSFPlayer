@@ -5,7 +5,9 @@
 
 根据资料 http://wiki.nesdev.com/w/index.php/APU 以及部分 [JSNES](https://github.com/bfirsh/jsnes) 代码进行编写
 
-安装Typescript后，用tsc命令编译即可，打开build下的index.html可以测试。
+请安装Typescript，初始化工程 `npm install`
+请使用 `npm run watch` 或 `npm run build`命令进行编译。
+打开build下的index.html可以测试。
 
 A Simple NSF Player
 
